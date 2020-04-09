@@ -31,13 +31,13 @@ data segment para 'data'
     ball_vy dw 02h
 
     paddle_left_x dw 0ah
-    paddle_left_y dw 0ah
+    paddle_left_y dw 0fh
 
     paddle_right_x dw 136h
-    paddle_right_y dw 0ah
+    paddle_right_y dw 0fh
 
     paddle_width dw 08h
-    paddle_height dw 15h
+    paddle_height dw 14h
 
 data ends
 
@@ -69,7 +69,7 @@ code segment para 'code'
         call clear_screen
 
         ;game logic
-        call move_ball
+        ; call move_ball
         CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
         CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
         CALL_DRAW_RECT paddle_right_x,paddle_right_y,paddle_width,paddle_height
@@ -84,8 +84,17 @@ code segment para 'code'
     ;CALL_DRAW_RECT macro to safely call this function
     draw_rect proc near
         mov bp, sp
-        mov cx, [bp+2]
-        mov dx, [bp+4]
+
+        mov ax,[bp+6];size_x
+        shr ax,1;divide by 2
+        sub [bp+2],ax
+
+        mov ax,[bp+8];size_y
+        shr ax,1;divide by 2
+        sub [bp+4],ax
+
+        mov cx, [bp+2];x
+        mov dx, [bp+4];y
 
         draw_rect_horizontal:
             ;draw a pixel
@@ -94,19 +103,19 @@ code segment para 'code'
             mov bh, 00h;page number
             int 10h
 
-            ;inc cx, loop back if cx - [bp+2] <= ball_size
+            ;inc cx, loop back if cx - x <= size_x
             inc cx
             mov ax,cx
-            sub ax,[bp+2]
-            cmp ax,[bp+6]
+            sub ax,[bp+2];x
+            cmp ax,[bp+6];size_x
             jng draw_rect_horizontal
 
             ;jump a line and car another line
-            mov cx, [bp+2]
+            mov cx, [bp+2];x
             inc dx
             mov ax,dx
-            sub ax,[bp+4]
-            cmp ax,[bp+8]
+            sub ax,[bp+4];y
+            cmp ax,[bp+8];size_y
             jng draw_rect_horizontal
 
         ret
