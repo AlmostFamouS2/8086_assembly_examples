@@ -33,8 +33,11 @@ data segment para 'data'
     paddle_left_x dw 0ah
     paddle_left_y dw 0ah
 
-    paddle_width dw 05h
-    paddle_height dw 0fh
+    paddle_right_x dw 136h
+    paddle_right_y dw 0ah
+
+    paddle_width dw 08h
+    paddle_height dw 15h
 
 data ends
 
@@ -64,10 +67,12 @@ code segment para 'code'
             mov time_aux,dl
 
         call clear_screen
-        ; call move_ball
-        call draw_ball
-        ;CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
-        ; CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
+
+        ;game logic
+        call move_ball
+        CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
+        CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
+        CALL_DRAW_RECT paddle_right_x,paddle_right_y,paddle_width,paddle_height
         ;end game logic
 
         jmp check_time
@@ -78,9 +83,9 @@ code segment para 'code'
     ;====== draw_rect(x,y,size_x,size_y) draws a rectangle with a size (size_x,size_yy) and position (x,y)
     ;CALL_DRAW_RECT macro to safely call this function
     draw_rect proc near
-        mov di, sp
-        mov cx, [di+2]
-        mov dx, [di+4]
+        mov bp, sp
+        mov cx, [bp+2]
+        mov dx, [bp+4]
 
         draw_rect_horizontal:
             ;draw a pixel
@@ -89,53 +94,23 @@ code segment para 'code'
             mov bh, 00h;page number
             int 10h
 
-            ;inc cx, loop back if cx - [di+2] <= ball_size
+            ;inc cx, loop back if cx - [bp+2] <= ball_size
             inc cx
             mov ax,cx
-            sub ax,[di+2]
-            cmp ax,ball_size
+            sub ax,[bp+2]
+            cmp ax,[bp+6]
             jng draw_rect_horizontal
 
             ;jump a line and car another line
-            mov cx, [di+2]
+            mov cx, [bp+2]
             inc dx
             mov ax,dx
-            sub ax,[di+4]
-            cmp ax,ball_size
+            sub ax,[bp+4]
+            cmp ax,[bp+8]
             jng draw_rect_horizontal
 
         ret
     draw_rect endp
-
-    draw_ball proc near
-
-        mov cx, ball_x
-        mov dx, ball_y
-
-        draw_ball_horizontal:
-            ;draw a pixel
-            mov ah, 0ch;configuration to write pixel
-            mov al, WHITE
-            mov bh, 00h;page number
-            int 10h
-
-            ;inc cx, loop back if cx - ball_x <= ball_size
-            inc cx
-            mov ax,cx
-            sub ax,ball_x
-            cmp ax,ball_size
-            jng draw_ball_horizontal
-
-            ;jump a line and car another line
-            mov cx, ball_x
-            inc dx
-            mov ax,dx
-            sub ax,ball_y
-            cmp ax,ball_size
-            jng draw_ball_horizontal
-
-        ret
-    draw_ball endp
 
     clear_screen proc near
         ;set video mode
