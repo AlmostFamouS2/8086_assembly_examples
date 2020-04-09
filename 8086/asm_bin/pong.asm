@@ -10,11 +10,11 @@ CALL_DRAW_RECT MACRO x,y,sx,sy
     add sp,8
 ENDM
 
-.model small
+stack segment para stack
+    db 64 dup(' ')
+stack ends
 
-org 100h
-
-.data
+data segment para 'data'
     window_width dw 140h; 320 pixels
     window_height dw 0c8h; 200 pixels
     window_bounds dw 6h
@@ -36,10 +36,19 @@ org 100h
     paddle_width dw 05h
     paddle_height dw 0fh
 
+data ends
 
-.code
-
+code segment para 'code'
     main proc far
+    assume cs:code,ds:data,ss:stack
+    push ds
+    sub ax,ax
+    push ax
+    mov ax,data
+    mov ds,ax
+    pop ax
+    pop ax
+
         ;init game logic
         call clear_screen
         call reset_ball
@@ -56,7 +65,8 @@ org 100h
 
         call clear_screen
         ; call move_ball
-        CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
+        call draw_ball
+        ;CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
         ; CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
         ;end game logic
 
@@ -192,5 +202,7 @@ org 100h
         mov ball_y, ax
         ret
     reset_ball endp
+
+code ends
 
 end
