@@ -12,12 +12,22 @@ CALL_DRAW_RECT MACRO x,y,sx,sy
     call draw_rect
     add sp,8
 ENDM
+
+CALL_MOVE_PADDLE MACRO paddle_y_ref,paddle_vy_ref
+    mov ax, offset paddle_vy_ref
+    push ax
+    mov ax, offset paddle_y_ref
+    push ax
+    call move_paddle
+    add sp,4
+ENDM
 ;========= MACROS ========;
 
 stack segment para stack
     db 64 dup(' ')
 stack ends
 
+;========= DATA ========;
 data segment para 'data'
     window_width dw 140h; 320 pixels
     window_height dw 0c8h; 200 pixels
@@ -37,15 +47,17 @@ data segment para 'data'
     paddle_left_x dw 0ah
     paddle_left_y dw 0fh
 
+    paddle_left_vy dw 05h
+    paddle_right_vy dw 05h
+
     paddle_right_x dw 136h
     paddle_right_y dw 0fh
 
     paddle_width dw 08h
     paddle_height dw 14h
 
-    paddle_vy dw 05h
-
 data ends
+;========= END DATA ========;
 
 code segment para 'code'
     main proc far
@@ -76,7 +88,8 @@ code segment para 'code'
 
         ;game logic
         call move_ball
-        call move_paddle
+        CALL_MOVE_PADDLE paddle_left_y, paddle_left_vy
+        CALL_MOVE_PADDLE paddle_right_y, paddle_right_vy
         ;end game logic
 
         ;draw
@@ -146,8 +159,11 @@ code segment para 'code'
 ;========= PADDLE CODE ========;
 
     move_paddle proc near
-        mov ax, paddle_left_y
-        add ax, paddle_vy
+        mov bp, sp
+        mov di,[bp+2];paddle_y*
+        mov si,[bp+4];paddle_vy*
+        mov ax, [di]
+        add ax, [si]
 
         ;check bounds down
         ; y + height/2 + bounds >= window_height?
@@ -180,7 +196,9 @@ code segment para 'code'
         sub ax, bx
 
         ;temp
-        neg paddle_vy
+        mov bx, [si]
+        neg bx
+        mov [si], bx
         jmp commit_move_paddle
 
         hit_bounds_up:
@@ -192,11 +210,13 @@ code segment para 'code'
         add ax, bx
 
         ;temp
-        neg paddle_vy
+        mov bx, [si]
+        neg bx
+        mov [si], bx
         jmp commit_move_paddle
 
         commit_move_paddle:
-        mov paddle_left_y, ax
+        mov [di], ax
         ret
 
     move_paddle endp
