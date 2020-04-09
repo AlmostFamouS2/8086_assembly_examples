@@ -1,6 +1,9 @@
+;========= CONSTANTS ========;
 BLACK equ 0h
 WHITE equ 0fh
+;========= END CONSTANTS ========;
 
+;========= MACROS ========;
 CALL_DRAW_RECT MACRO x,y,sx,sy
     push sy
     push sx
@@ -9,6 +12,7 @@ CALL_DRAW_RECT MACRO x,y,sx,sy
     call draw_rect
     add sp,8
 ENDM
+;========= MACROS ========;
 
 stack segment para stack
     db 64 dup(' ')
@@ -38,6 +42,8 @@ data segment para 'data'
 
     paddle_width dw 08h
     paddle_height dw 14h
+
+    paddle_vy dw 05h
 
 data ends
 
@@ -69,73 +75,22 @@ code segment para 'code'
         call clear_screen
 
         ;game logic
-        ; call move_ball
+        call move_ball
+        call move_paddle
+        ;end game logic
+
+        ;draw
         CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
         CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
         CALL_DRAW_RECT paddle_right_x,paddle_right_y,paddle_width,paddle_height
-        ;end game logic
+        ;end draw
 
         jmp check_time
 
         ret
     main endp
 
-    ;====== draw_rect(x,y,size_x,size_y) draws a rectangle with a size (size_x,size_yy) and position (x,y)
-    ;CALL_DRAW_RECT macro to safely call this function
-    draw_rect proc near
-        mov bp, sp
-
-        mov ax,[bp+6];size_x
-        shr ax,1;divide by 2
-        sub [bp+2],ax
-
-        mov ax,[bp+8];size_y
-        shr ax,1;divide by 2
-        sub [bp+4],ax
-
-        mov cx, [bp+2];x
-        mov dx, [bp+4];y
-
-        draw_rect_horizontal:
-            ;draw a pixel
-            mov ah, 0ch;configuration to write pixel
-            mov al, WHITE
-            mov bh, 00h;page number
-            int 10h
-
-            ;inc cx, loop back if cx - x <= size_x
-            inc cx
-            mov ax,cx
-            sub ax,[bp+2];x
-            cmp ax,[bp+6];size_x
-            jng draw_rect_horizontal
-
-            ;jump a line and car another line
-            mov cx, [bp+2];x
-            inc dx
-            mov ax,dx
-            sub ax,[bp+4];y
-            cmp ax,[bp+8];size_y
-            jng draw_rect_horizontal
-
-        ret
-    draw_rect endp
-
-    clear_screen proc near
-        ;set video mode
-        mov ah, 00h
-        mov al, 13h
-        int 10h
-
-        ;set background color
-        mov ah, 0bh
-        mov bh, 00h
-        mov bl, BLACK
-        int 10h
-
-        ret
-    clear_screen endp
-
+;========= BALL CODE ========;
     move_ball proc near
         ;move ball horizontally
         mov ax,ball_vx
@@ -186,7 +141,124 @@ code segment para 'code'
         mov ball_y, ax
         ret
     reset_ball endp
+;========= END BALL CODE ========;
 
+;========= PADDLE CODE ========;
+
+    move_paddle proc near
+        mov ax, paddle_left_y
+        add ax, paddle_vy
+
+        ;check bounds down
+        ; y + height/2 + bounds >= window_height?
+        mov bx, ax
+        mov cx, paddle_height
+        shr cx, 1
+        add bx, cx
+        add bx, window_bounds
+        cmp bx, window_height
+        jge hit_bounds_down
+
+        ;check bounds up
+        ; y - height/2 - bounds < 0?
+        mov bx, ax
+        mov cx, paddle_height
+        shr cx, 1
+        sub bx, cx
+        sub bx, window_bounds
+        cmp bx, 00h
+        jl hit_bounds_up
+
+        jmp commit_move_paddle
+
+        hit_bounds_down:
+        ; y = window_height - size/2 - window_bounds
+        mov ax, window_height
+        sub ax, window_bounds
+        mov bx, paddle_height
+        shr bx, 1
+        sub ax, bx
+
+        ;temp
+        neg paddle_vy
+        jmp commit_move_paddle
+
+        hit_bounds_up:
+        ; y = 0 + size/2 + window bounds
+        mov ax, 0
+        add ax, window_bounds
+        mov bx, paddle_height
+        shr bx, 1
+        add ax, bx
+
+        ;temp
+        neg paddle_vy
+        jmp commit_move_paddle
+
+        commit_move_paddle:
+        mov paddle_left_y, ax
+        ret
+
+    move_paddle endp
+;========= END PADDLE CODE ========;
+
+;========= GRAPHICS ========;
+    clear_screen proc near
+        ;set video mode
+        mov ah, 00h
+        mov al, 13h
+        int 10h
+
+        ;set background color
+        mov ah, 0bh
+        mov bh, 00h
+        mov bl, BLACK
+        int 10h
+
+        ret
+    clear_screen endp
+
+    ;====== draw_rect(x,y,size_x,size_y) draws a rectangle with a size (size_x,size_yy) and position (x,y)
+    ;CALL_DRAW_RECT macro to safely call this function
+    draw_rect proc near
+        mov bp, sp
+
+        mov ax,[bp+6];size_x
+        shr ax,1;divide by 2
+        sub [bp+2],ax
+
+        mov ax,[bp+8];size_y
+        shr ax,1;divide by 2
+        sub [bp+4],ax
+
+        mov cx, [bp+2];x
+        mov dx, [bp+4];y
+
+        draw_rect_horizontal:
+            ;draw a pixel
+            mov ah, 0ch;configuration to write pixel
+            mov al, WHITE
+            mov bh, 00h;page number
+            int 10h
+
+            ;inc cx, loop back if cx - x <= size_x
+            inc cx
+            mov ax,cx
+            sub ax,[bp+2];x
+            cmp ax,[bp+6];size_x
+            jng draw_rect_horizontal
+
+            ;jump a line and car another line
+            mov cx, [bp+2];x
+            inc dx
+            mov ax,dx
+            sub ax,[bp+4];y
+            cmp ax,[bp+8];size_y
+            jng draw_rect_horizontal
+
+        ret
+    draw_rect endp
+;========= END GRAPHICS ========;
 code ends
 
 end
