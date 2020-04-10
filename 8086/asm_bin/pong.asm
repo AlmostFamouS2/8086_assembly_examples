@@ -4,9 +4,9 @@ WHITE equ 0fh
 ;========= END CONSTANTS ========;
 
 ;========= MACROS ========;
-CALL_DRAW_RECT MACRO x,y,sx,sy
-    push sy
-    push sx
+CALL_DRAW_RECT MACRO x,y,extent_x,extent_y
+    push extent_y
+    push extent_x
     push y
     push x
     call draw_rect
@@ -40,7 +40,7 @@ data segment para 'data'
 
     ball_x dw 0Ah
     ball_y dw 0Ah
-    ball_size dw 04h
+    ball_extent dw 02h
     ball_vx dw 05h
     ball_vy dw 02h
 
@@ -53,8 +53,8 @@ data segment para 'data'
     paddle_right_x dw 136h
     paddle_right_y dw 0fh
 
-    paddle_width dw 08h
-    paddle_height dw 14h
+    paddle_extent_x dw 04h
+    paddle_extent_y dw 0ah
 
 data ends
 ;========= END DATA ========;
@@ -62,13 +62,8 @@ data ends
 code segment para 'code'
     main proc far
     assume cs:code,ds:data,ss:stack
-    push ds
-    sub ax,ax
-    push ax
     mov ax,data
     mov ds,ax
-    pop ax
-    pop ax
 
         ;init game logic
         call clear_screen
@@ -93,9 +88,9 @@ code segment para 'code'
         ;end game logic
 
         ;draw
-        CALL_DRAW_RECT ball_x,ball_y,ball_size,ball_size
-        CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_width,paddle_height
-        CALL_DRAW_RECT paddle_right_x,paddle_right_y,paddle_width,paddle_height
+        CALL_DRAW_RECT ball_x,ball_y,ball_extent,ball_extent
+        CALL_DRAW_RECT paddle_left_x,paddle_left_y,paddle_extent_x,paddle_extent_y
+        CALL_DRAW_RECT paddle_right_x,paddle_right_y,paddle_extent_x,paddle_extent_y
         ;end draw
 
         jmp check_time
@@ -115,7 +110,7 @@ code segment para 'code'
         jl label_reset_ball
 
         mov ax,window_width
-        sub ax,ball_size
+        sub ax,ball_extent
         sub ax, window_bounds
         cmp ball_x, ax
         jg label_reset_ball
@@ -130,7 +125,7 @@ code segment para 'code'
         jl neg_velocity_y
 
         mov ax, window_height
-        sub ax, ball_size
+        sub ax, ball_extent
         sub ax, window_bounds
         cmp ball_y, ax
         jg neg_velocity_y
@@ -168,9 +163,7 @@ code segment para 'code'
         ;check bounds down
         ; y + height/2 + bounds >= window_height?
         mov bx, ax
-        mov cx, paddle_height
-        shr cx, 1
-        add bx, cx
+        add bx, paddle_extent_y
         add bx, window_bounds
         cmp bx, window_height
         jge hit_bounds_down
@@ -178,9 +171,7 @@ code segment para 'code'
         ;check bounds up
         ; y - height/2 - bounds < 0?
         mov bx, ax
-        mov cx, paddle_height
-        shr cx, 1
-        sub bx, cx
+        sub bx, paddle_extent_y
         sub bx, window_bounds
         cmp bx, 00h
         jl hit_bounds_up
@@ -191,9 +182,7 @@ code segment para 'code'
         ; y = window_height - size/2 - window_bounds
         mov ax, window_height
         sub ax, window_bounds
-        mov bx, paddle_height
-        shr bx, 1
-        sub ax, bx
+        sub ax, paddle_extent_y
 
         ;temp
         mov bx, [si]
@@ -205,9 +194,7 @@ code segment para 'code'
         ; y = 0 + size/2 + window bounds
         mov ax, 0
         add ax, window_bounds
-        mov bx, paddle_height
-        shr bx, 1
-        add ax, bx
+        add ax, paddle_extent_y
 
         ;temp
         mov bx, [si]
@@ -221,6 +208,19 @@ code segment para 'code'
 
     move_paddle endp
 ;========= END PADDLE CODE ========;
+
+
+;========= COLLISION CODE ========;
+    ;==== check_rectancle_collision between two rectangles A and B, returns x,y delta overlap between A and B
+    ;receives (x_a, y_a, extent_x_a, extent_y_a, x_b, y_b, extent_x_b, extent_x_b)
+    ;use CALL_CHECK_RECTANGLE_COLLISION for safe calling this function
+    check_rectancle_collision proc near
+        mov bp,sp
+        ;if x_a + width_a
+        ret
+    check_rectancle_collision endp
+
+;========= END COLLISION CODE ========;
 
 ;========= GRAPHICS ========;
     clear_screen proc near
@@ -238,18 +238,16 @@ code segment para 'code'
         ret
     clear_screen endp
 
-    ;====== draw_rect(x,y,size_x,size_y) draws a rectangle with a size (size_x,size_yy) and position (x,y)
+    ;====== draw_rect(x,y,extent_x,extent_y) draws a rectangle with a size (extent_x,extent_yy) and position (x,y)
     ;CALL_DRAW_RECT macro to safely call this function
     draw_rect proc near
         mov bp, sp
 
-        mov ax,[bp+6];size_x
-        shr ax,1;divide by 2
-        sub [bp+2],ax
+        mov ax,[bp+6];extent_x
+        sub [bp+2],ax;x - extent_x
 
-        mov ax,[bp+8];size_y
-        shr ax,1;divide by 2
-        sub [bp+4],ax
+        mov ax,[bp+8];extent_y
+        sub [bp+4],ax;y-extent_y
 
         mov cx, [bp+2];x
         mov dx, [bp+4];y
@@ -261,11 +259,13 @@ code segment para 'code'
             mov bh, 00h;page number
             int 10h
 
-            ;inc cx, loop back if cx - x <= size_x
+            ;inc cx, loop back if cx - x <= extent_x
             inc cx
             mov ax,cx
             sub ax,[bp+2];x
-            cmp ax,[bp+6];size_x
+            mov bx,[bp+6];extent_x
+            shl bx, 1
+            cmp ax,bx;extent_x*2
             jng draw_rect_horizontal
 
             ;jump a line and car another line
@@ -273,7 +273,9 @@ code segment para 'code'
             inc dx
             mov ax,dx
             sub ax,[bp+4];y
-            cmp ax,[bp+8];size_y
+            mov bx,[bp+8];extent_y
+            shl bx,1
+            cmp ax,bx;extent_y*2
             jng draw_rect_horizontal
 
         ret
