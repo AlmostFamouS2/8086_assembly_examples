@@ -21,6 +21,15 @@ CALL_MOVE_PADDLE MACRO paddle_y_ref,paddle_vy_ref
     call move_paddle
     add sp,4
 ENDM
+
+CALL_CHECK_OVERLAP_AXIS MACRO a, extent_a, b, extent_b
+    push extent_b
+    push b
+    push extent_a
+    push a
+    call check_overlap_axis
+    add sp, 8
+ENDM
 ;========= MACROS ========;
 
 stack segment para stack
@@ -54,7 +63,9 @@ data segment para 'data'
     paddle_right_y dw 0fh
 
     paddle_extent_x dw 04h
-    paddle_extent_y dw 0ah
+    paddle_extent_y dw 0ch
+
+    overlap_skin_width dw 2h
 
 data ends
 ;========= END DATA ========;
@@ -82,9 +93,10 @@ code segment para 'code'
         call clear_screen
 
         ;game logic
-        call move_ball
         CALL_MOVE_PADDLE paddle_left_y, paddle_left_vy
         CALL_MOVE_PADDLE paddle_right_y, paddle_right_vy
+
+        call move_ball
         ;end game logic
 
         ;draw
@@ -104,43 +116,89 @@ code segment para 'code'
         mov ax,ball_vx
         add ball_x,ax
 
-        ;horizontal collision check
-        mov ax,window_bounds
-        cmp ball_x,ax
-        jl label_reset_ball
-
-        mov ax,window_width
-        sub ax,ball_extent
-        sub ax, window_bounds
-        cmp ball_x, ax
-        jg label_reset_ball
-
         ;mov ball vertically
         mov ax,ball_vy
         add ball_y,ax
 
-        ;vertical collision check
-        mov ax, window_bounds
-        cmp ball_y, ax
-        jl neg_velocity_y
+        call check_ball_paddle_collision
+        call check_ball_window_bounds_collision
 
+        ret
+    move_ball endp
+
+    check_ball_window_bounds_collision proc near
+        ;left bounds collision
+        mov ax,window_bounds
+        add ax, ball_extent
+        cmp ball_x,ax
+        jle bounds_label_reset_ball
+
+        ;right bounds collision
+        mov ax,window_width
+        sub ax,ball_extent
+        sub ax, window_bounds
+        cmp ball_x, ax
+        jge bounds_label_reset_ball
+
+        ;up bounds collision check
+        mov ax, window_bounds
+        add ax, ball_extent
+        cmp ball_y, ax
+        jle bounds_neg_velocity_y
+
+        ;down bounds collision check
         mov ax, window_height
         sub ax, ball_extent
         sub ax, window_bounds
         cmp ball_y, ax
-        jg neg_velocity_y
+        jge bounds_neg_velocity_y
 
         ret
 
-        label_reset_ball:
+        bounds_label_reset_ball:
+        ; neg ball_vx
         call reset_ball
         ret
 
-        neg_velocity_y:
+        bounds_neg_velocity_y:
         neg ball_vy
         ret
+    check_ball_window_bounds_collision endp
 
-    move_ball endp
+    check_ball_paddle_collision proc near
+        ;left_paddle collision check
+        CALL_CHECK_OVERLAP_AXIS ball_x, ball_extent, paddle_left_x, paddle_extent_x
+        push ax
+        CALL_CHECK_OVERLAP_AXIS ball_y, ball_extent, paddle_left_y, paddle_extent_y
+        pop bx
+        and ax, bx
+        cmp ax, 0
+        jg adjust_x_and_neg_vx
+
+        ;right_paddle collision check
+        CALL_CHECK_OVERLAP_AXIS ball_x, ball_extent, paddle_right_x, paddle_extent_x
+        push ax
+        CALL_CHECK_OVERLAP_AXIS ball_y, ball_extent, paddle_right_y, paddle_extent_y
+        pop bx
+        and ax, bx
+        cmp ax, 0
+        jg adjust_x_and_neg_vx
+
+        ret
+
+        adjust_x_and_neg_vx:
+        mov ax, ball_vx
+        neg ball_vx
+        test ax, ax
+        jns adjust_pos_negative
+
+        add ball_x, bx
+        ret
+
+        adjust_pos_negative:
+        sub ball_x, bx
+        ret
+    check_ball_paddle_collision endp
 
     reset_ball proc near
         mov ax, ball_origin_x
@@ -211,14 +269,37 @@ code segment para 'code'
 
 
 ;========= COLLISION CODE ========;
-    ;==== check_rectancle_collision between two rectangles A and B, returns x,y delta overlap between A and B
-    ;receives (x_a, y_a, extent_x_a, extent_y_a, x_b, y_b, extent_x_b, extent_x_b)
-    ;use CALL_CHECK_RECTANGLE_COLLISION for safe calling this function
-    check_rectancle_collision proc near
+    ;==== check_overlap between two rectangles A and B in one axis (x or y)
+    ; params: (x, extent_x, y, extent_y)
+    ; ax = abs(delta) if there is an overlap, 0 otherside
+    ;use CALL_CHECK_OVERLAP_AXIS for safe calling this function
+    check_overlap_axis proc near
         mov bp,sp
-        ;if x_a + width_a
+
+        ;abs(a-b)
+        mov ax, [bp+2];a
+        sub ax, [bp+6];b
+        jns do_check_overlap
+        ;result was negative, negate a
+        neg ax
+
+        do_check_overlap:
+        ;extent_a + extent_b
+        mov bx, [bp+4]
+        add bx, [bp+8]
+        add bx, overlap_skin_width;some extra width to the collision
+
+        ;check intersect: abs(a-b) < extent_a + extent_b
+        sub ax, bx
+        js handle_intersecting
+
+        mov ax, 0
         ret
-    check_rectancle_collision endp
+
+        handle_intersecting:
+        neg ax
+        ret
+    check_overlap_axis endp
 
 ;========= END COLLISION CODE ========;
 
