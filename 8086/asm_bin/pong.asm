@@ -443,17 +443,31 @@ code segment para 'code'
         sub ax, paddle_right_y
 
         cmp ax, 0h
-        jg .set_velocity_up
+        jg .check_should_go_down
+
+        .check_should_go_up:
+        cmp ball_vy, 0h
+
+        jg .stop_paddle
 
         mov bx, paddle_vy_max
         mov paddle_right_vy, bx
         neg paddle_right_vy
         ret
 
-        .set_velocity_up:
+        .check_should_go_down:
+        cmp ball_vy, 0h
+
+        jl .stop_paddle
+
         mov bx, paddle_vy_max
         mov paddle_right_vy, bx
         ret
+
+        .stop_paddle:
+        mov paddle_right_vy, 0h
+        ret
+
     ai_control_paddle endp
 ;========= END AI ========;
 code ends
