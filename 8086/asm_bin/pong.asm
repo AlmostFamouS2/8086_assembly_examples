@@ -1,6 +1,10 @@
 ;========= CONSTANTS ========;
 BLACK equ 0h
 WHITE equ 0fh
+MASK_INPUT_UP equ 80h
+MASK_INPUT_DOWN equ 40h
+P1_UP_KEY equ 'w'
+P1_DOWN_KEY equ 's'
 ;========= END CONSTANTS ========;
 
 ;========= MACROS ========;
@@ -56,8 +60,10 @@ data segment para 'data'
     paddle_left_x dw 0ah
     paddle_left_y dw 0fh
 
-    paddle_left_vy dw 05h
+    paddle_left_vy dw 0h
     paddle_right_vy dw 05h
+
+    paddle_vy_max dw 05h
 
     paddle_right_x dw 136h
     paddle_right_y dw 0fh
@@ -66,6 +72,10 @@ data segment para 'data'
     paddle_extent_y dw 0ch
 
     overlap_skin_width dw 2h
+
+    ; up, down
+    input_p1 db 0h
+    input_p2 db 0h
 
 data ends
 ;========= END DATA ========;
@@ -93,6 +103,12 @@ code segment para 'code'
         call clear_screen
 
         ;game logic
+        ;process input
+        call read_input
+        call process_input
+
+        call ai_control_paddle
+
         CALL_MOVE_PADDLE paddle_left_y, paddle_left_vy
         CALL_MOVE_PADDLE paddle_right_y, paddle_right_vy
 
@@ -215,6 +231,8 @@ code segment para 'code'
         mov bp, sp
         mov di,[bp+2];paddle_y*
         mov si,[bp+4];paddle_vy*
+
+        ;paddle_y + paddle_vy
         mov ax, [di]
         add ax, [si]
 
@@ -241,22 +259,17 @@ code segment para 'code'
         mov ax, window_height
         sub ax, window_bounds
         sub ax, paddle_extent_y
-
-        ;temp
-        mov bx, [si]
-        neg bx
-        mov [si], bx
-        jmp commit_move_paddle
+        jmp .block_paddle
 
         hit_bounds_up:
         ; y = 0 + size/2 + window bounds
         mov ax, 0
         add ax, window_bounds
         add ax, paddle_extent_y
+        jmp .block_paddle
 
-        ;temp
-        mov bx, [si]
-        neg bx
+        .block_paddle:
+        mov bx, 0h
         mov [si], bx
         jmp commit_move_paddle
 
@@ -302,6 +315,67 @@ code segment para 'code'
     check_overlap_axis endp
 
 ;========= END COLLISION CODE ========;
+
+
+;========= INPUT ========;
+
+    read_input proc near
+        mov input_p1, 0h
+        .read_input_non_block:
+        mov ah, 01h
+        int 16h
+        jnz .maybe_move_to_input_buffer
+
+        ret
+
+        .maybe_move_to_input_buffer:
+        mov ah, 00h
+        int 16h
+        cmp al, P1_UP_KEY
+        je up_pressed
+
+        cmp al, P1_DOWN_KEY
+        je down_pressed
+
+        jmp .read_input_non_block
+
+        up_pressed:
+        mov al, input_p1
+        or al, MASK_INPUT_UP
+        mov input_p1, al
+
+        jmp .read_input_non_block
+
+        down_pressed:
+        mov al, input_p1
+        or al, MASK_INPUT_DOWN
+        mov input_p1, al
+
+        jmp .read_input_non_block
+    read_input endp
+
+    process_input proc near
+        mov paddle_left_vy, 0h
+        test input_p1, MASK_INPUT_UP
+        jnz .up_pressed
+
+        test input_p1, MASK_INPUT_DOWN
+        jnz .down_pressed
+
+        ret
+
+        .up_pressed:
+        mov bx, paddle_vy_max
+        mov paddle_left_vy, bx
+        neg paddle_left_vy
+        ret
+        .down_pressed:
+        mov bx, paddle_vy_max
+        mov paddle_left_vy, bx
+        ret
+    process_input endp
+;========= END INPUT ========;
+
 
 ;========= GRAPHICS ========;
     clear_screen proc near
@@ -362,6 +436,26 @@ code segment para 'code'
         ret
     draw_rect endp
 ;========= END GRAPHICS ========;
+
+;========= AI ========;
+    ai_control_paddle proc near
+        mov ax, ball_y
+        sub ax, paddle_right_y
+
+        cmp ax, 0h
+        jg .set_velocity_up
+
+        mov bx, paddle_vy_max
+        mov paddle_right_vy, bx
+        neg paddle_right_vy
+        ret
+
+        .set_velocity_up:
+        mov bx, paddle_vy_max
+        mov paddle_right_vy, bx
+        ret
+    ai_control_paddle endp
+;========= END AI ========;
 code ends
 
 end
